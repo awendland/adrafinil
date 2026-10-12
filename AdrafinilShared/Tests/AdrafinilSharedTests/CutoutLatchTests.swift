@@ -18,18 +18,63 @@ struct CutoutLatchTests {
     }
 
     @Test
-    func `thermal latch holds at the threshold and clears only past hysteresis`() {
+    func `thermal latch holds at the threshold and clears only past hysteresis, sustained`() {
         var latch = CutoutLatch()
         latch.trip(.thermal)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
 
         // Just under the threshold is not enough — that's the oscillation the latch exists for.
-        latch.update(temperatureCelsius: 79, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true)
+        latch.update(temperatureCelsius: 79, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0)
         #expect(latch.isLatched)
 
-        // At threshold − hysteresis it clears.
-        let cleared = latch.update(temperatureCelsius: 75, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true)
+        // At threshold − hysteresis the cool-down starts, but one reading doesn't clear it.
+        latch.update(temperatureCelsius: 75, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0)
+        #expect(latch.isLatched)
+
+        // Still below the margin a full cool-down later: clears.
+        let cleared = latch.update(temperatureCelsius: 74, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + CutoutLatch.thermalCoolDuration)
         #expect(cleared == [.thermal])
         #expect(!latch.isLatched)
+    }
+
+    @Test
+    func `a hot reading during the cool-down restarts it`() {
+        var latch = CutoutLatch()
+        latch.trip(.thermal)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        let minute: TimeInterval = 60
+
+        // A bursty load: dips below the margin between batches, then heats again.
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0)
+        latch.update(temperatureCelsius: 82, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + 4 * minute)
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + 5 * minute)
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + 11 * minute)
+        #expect(latch.isLatched, "only six cool minutes since the last hot reading")
+
+        let cleared = latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + 15 * minute)
+        #expect(cleared == [.thermal])
+    }
+
+    @Test
+    func `a missing reading restarts the thermal cool-down`() {
+        var latch = CutoutLatch()
+        latch.trip(.thermal)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0)
+        latch.update(temperatureCelsius: nil, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + 5 * 60)
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + CutoutLatch.thermalCoolDuration)
+        #expect(latch.isLatched)
+    }
+
+    @Test
+    func `re-tripping the thermal latch restarts its cool-down`() {
+        var latch = CutoutLatch()
+        latch.trip(.thermal)
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0)
+        latch.trip(.thermal)
+        latch.update(temperatureCelsius: 70, thermalThresholdCelsius: 80, batteryPercent: nil, onBattery: nil, batteryThresholdPercent: 20, lidClosed: true, now: t0 + CutoutLatch.thermalCoolDuration)
+        #expect(latch.isLatched)
     }
 
     @Test
@@ -65,8 +110,10 @@ struct CutoutLatchTests {
         var latch = CutoutLatch()
         latch.trip(.thermal)
         latch.trip(.lowBattery)
-        // Cool but still draining: thermal clears, battery stays.
-        let cleared = latch.update(temperatureCelsius: 60, thermalThresholdCelsius: 80, batteryPercent: 15, onBattery: true, batteryThresholdPercent: 20, lidClosed: true)
+        // Cool for a full cool-down but still draining: thermal clears, battery stays.
+        let t0 = Date(timeIntervalSinceReferenceDate: 0)
+        latch.update(temperatureCelsius: 60, thermalThresholdCelsius: 80, batteryPercent: 15, onBattery: true, batteryThresholdPercent: 20, lidClosed: true, now: t0)
+        let cleared = latch.update(temperatureCelsius: 60, thermalThresholdCelsius: 80, batteryPercent: 15, onBattery: true, batteryThresholdPercent: 20, lidClosed: true, now: t0 + CutoutLatch.thermalCoolDuration)
         #expect(cleared == [.thermal])
         #expect(latch.active == [.lowBattery])
     }

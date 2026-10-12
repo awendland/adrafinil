@@ -11,7 +11,10 @@ import Foundation
 ///
 /// Clearing requires the hazard to recede with margin (hysteresis), or the lid to open —
 /// open-lid thermals and drain are macOS's problem, and a present user can re-close the lid to
-/// re-arm protection deliberately.
+/// re-arm protection deliberately. The thermal margin must also hold for
+/// `thermalCoolDuration`: the work that overheated the Mac usually outlives the hold that kept it
+/// awake, and a bursty load (model inference between batches) dips below the margin within a
+/// minute or two while still running.
 public struct CutoutLatch: Equatable, Sendable {
     public enum Cause: String, Sendable, CaseIterable {
         case thermal
@@ -20,8 +23,12 @@ public struct CutoutLatch: Equatable, Sendable {
 
     public static let thermalHysteresisCelsius = 5.0
     public static let batteryHysteresisPercent = 5
+    public static let thermalCoolDuration: TimeInterval = 10 * 60
 
     public private(set) var active: Set<Cause> = []
+    /// Start of the current unbroken run of readings at or below the thermal margin; `nil` while
+    /// hot, unread, or unlatched.
+    private var thermalCoolSince: Date?
 
     public init() {}
 
@@ -31,10 +38,12 @@ public struct CutoutLatch: Equatable, Sendable {
 
     public mutating func trip(_ cause: Cause) {
         active.insert(cause)
+        if cause == .thermal { thermalCoolSince = nil }
     }
 
     /// Re-evaluates the latch against current conditions; returns the causes that cleared.
-    /// Unknown readings (`nil`) keep a latch held — a cutout must not clear on missing data.
+    /// Unknown readings (`nil`) keep a latch held and restart the thermal cool-down — a cutout
+    /// must not clear on missing data.
     @discardableResult
     public mutating func update(
         temperatureCelsius: Double?,
@@ -43,13 +52,21 @@ public struct CutoutLatch: Equatable, Sendable {
         onBattery: Bool?,
         batteryThresholdPercent: Int,
         lidClosed: Bool,
+        now: Date = .now,
     ) -> Set<Cause> {
         var cleared: Set<Cause> = []
         if active.contains(.thermal) {
-            let cooled = temperatureCelsius.map { $0 <= thermalThresholdCelsius - Self.thermalHysteresisCelsius } ?? false
+            let belowMargin = temperatureCelsius.map { $0 <= thermalThresholdCelsius - Self.thermalHysteresisCelsius } ?? false
+            if belowMargin {
+                thermalCoolSince = thermalCoolSince ?? now
+            } else {
+                thermalCoolSince = nil
+            }
+            let cooled = thermalCoolSince.map { now.timeIntervalSince($0) >= Self.thermalCoolDuration } ?? false
             if !lidClosed || cooled {
                 active.remove(.thermal)
                 cleared.insert(.thermal)
+                thermalCoolSince = nil
             }
         }
         if active.contains(.lowBattery) {

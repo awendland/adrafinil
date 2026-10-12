@@ -50,6 +50,21 @@ final class SystemPowerMonitor {
         IONotificationPortSetDispatchQueue(port, DispatchQueue.main)
     }
 
+    /// Asks the system to sleep now — the call behind `pmset sleepnow`. User-idle assertions
+    /// don't defer it; a set `disablesleep` refuses it.
+    func requestSleep() {
+        let powerManagement = IOPMFindPowerManagement(kIOMainPortDefault)
+        guard powerManagement != 0 else {
+            log.error("IOPMFindPowerManagement failed — can't request sleep")
+            return
+        }
+        defer { IOServiceClose(powerManagement) }
+        let result = IOPMSleepSystem(powerManagement)
+        if result != kIOReturnSuccess {
+            log.error("IOPMSleepSystem failed: \(result, privacy: .public)")
+        }
+    }
+
     private func handle(_ messageType: UInt32, argument: UnsafeMutableRawPointer?) {
         switch messageType {
         case Self.canSystemSleep, Self.systemWillSleep:

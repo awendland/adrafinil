@@ -402,6 +402,9 @@ final class Daemon {
                     await playSleepCueIfNeeded()
                 }
                 await helperClient.setBlocked(blocking)
+                if !blocking {
+                    sleepAfterCutoutIfNeeded()
+                }
                 // Going idle is the safe moment to adopt a binary an update swapped in while we
                 // were holding.
                 relaunchIfUpdatedWhenIdle()
@@ -437,6 +440,19 @@ final class Daemon {
         guard let soundName = decision.soundName else { return }
         log.notice("pre-sleep cue (cause=\(self.lastReleaseCause.rawValue, privacy: .public)) before clearing the sleep block")
         await chimePlayer.playSleepCue(soundName: soundName, cue: decision.cue, volume: settings.soundVolume)
+    }
+
+    /// Puts a lid-closed Mac to sleep after a safety cutout, which clearing the block alone does
+    /// not do (see `CutoutSleepDecider`). The cutout latch keeps the agent that was cut off from
+    /// re-pinning it on the next wake.
+    private func sleepAfterCutoutIfNeeded() {
+        guard CutoutSleepDecider().shouldSleep(
+            cause: lastReleaseCause,
+            onlyDisplayIsClosedBuiltIn: DisplayHold.onlyDisplayIsClosedBuiltIn(lidClosed: lidMonitor.isLidClosed),
+            blockCleared: !helperClient.lastApplyFailed,
+        ) else { return }
+        log.notice("Safety cutout with the lid closed — requesting system sleep")
+        systemPowerMonitor.requestSleep()
     }
 
     /// Adopts a binary that an in-place app update has swapped onto disk by exiting so `launchd`
