@@ -101,8 +101,9 @@ These support shell-command hooks with a session-start and (mostly) a session-en
 | Codex | `~/.codex/hooks.json` | `UserPromptSubmit` | `Stop` |
 | Cursor | `~/.cursor/hooks.json` | `beforeSubmitPrompt` (`--ttl 3600`) | `stop` |
 | Gemini CLI | `~/.gemini/settings.json` | `SessionStart` | `SessionEnd` |
+| Devin | `~/.config/devin/config.json` | `UserPromptSubmit` | `Stop` + `SessionEnd` |
 
-Claude Code, Codex, and Gemini CLI share a nested JSON shape (`{"hooks": {event: [{"hooks": [{type, command}]}]}}`); Cursor uses a flatter shape (`{"command": …}` entries directly). Only Claude Code also exposes a real session-id env var; the others deliver the id only on stdin.
+Claude Code, Codex, Gemini CLI, and Devin share a nested JSON shape (`{"hooks": {event: [{"hooks": [{type, command}]}]}}`); Cursor uses a flatter shape (`{"command": …}` entries directly). Only Claude Code also exposes a real session-id env var; the others deliver the id only on stdin.
 
 **Claude Code holds are activity-scoped** (others are still session-scoped). It acquires on
 `UserPromptSubmit` (a turn begins) and releases on `Stop` (the agent finishes responding,
@@ -121,8 +122,13 @@ released instead of lingering as a phantom until the CPU-idle sweep. Its compani
 `SessionStart`[matcher `clear`] → acquire covers the post-clear plan run, whose first message
 bypasses `UserPromptSubmit`; other `SessionStart` sources stay unhooked (they land at an idle
 prompt, where holding would re-introduce the whole-session hold this integration moved away from).
-**Codex and Cursor are turn-scoped too** (verified events: Codex `UserPromptSubmit`/`Stop`,
-issue #2; Cursor `beforeSubmitPrompt`/`stop`, issue #15). Cursor's acquire additionally carries a
+**Codex, Cursor, and Devin are turn-scoped too** (verified events: Codex `UserPromptSubmit`/`Stop`,
+issue #2; Cursor `beforeSubmitPrompt`/`stop`, issue #15; Devin `UserPromptSubmit`/`Stop` plus a
+release-only `SessionEnd` for a session that ends without a `Stop`, verified against Devin CLI
+3000.11.3 — whether Devin fires `Stop` on an Esc-interrupt/cancel is unverified, so the CPU-idle
+sweep is the backstop; the same wiring is expected but unverified to cover Devin Desktop's
+"Devin Local" agent, which per Devin's docs runs the same `devin acp` harness and reads the same
+user config). Cursor's acquire additionally carries a
 `--ttl`: its holds attach to the single long-lived Cursor app process, which neither the process-exit
 watcher nor the CPU-idle sweep can catch (the app's own UI keeps the tree busy), so the TTL —
 refreshed each prompt — is the stale-hold backstop. Gemini's per-turn event names aren't
@@ -140,7 +146,7 @@ device-verified yet, so it stays session-scoped with the CPU-idle sweep as its i
 
 ### 3.4 Fallback: process sniffing
 
-The daemon maps known agent binary names to their `AgentKind` (`AgentKind.byBinaryName`). A kqueue watcher fires `NOTE_EXIT` on watched PIDs; a periodic sweep (every 30s) catches anything launched between events and re-arms watches. This both force-releases assertions when an owning process dies without firing its end hook, and optionally (off by default) auto-acquires for sniffed agents with no hook installed.
+The daemon maps known agent binary names to their `AgentKind` (`AgentKind.byBinaryName`). A kqueue watcher fires `NOTE_EXIT` on watched PIDs; a periodic sweep (every 30s) catches anything launched between events and re-arms watches. This both force-releases assertions when an owning process dies without firing its end hook, and optionally (off by default) auto-acquires for sniffed agents with no hook installed. Auto-acquire dedupes same-kind ancestor/descendant pairs (`SniffCandidates`) — e.g. Devin's `devin` wrapper and its `devin acp` child are one session — so it holds only for the uncovered representative rather than double-holding a pair.
 
 ### 3.5 Codex special case
 

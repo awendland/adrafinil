@@ -38,10 +38,19 @@ struct HookInstallerTests {
 
     @Test
     func `detects all tier 1 when all present`() throws {
-        let home = try makeFakeHome(detectedDirs: [".claude", ".codex", ".cursor", ".gemini"])
+        let home = try makeFakeHome(detectedDirs: [".claude", ".codex", ".cursor", ".gemini", ".config/devin"])
         defer { try? FileManager.default.removeItem(at: home) }
         let detected = Set(HookInstaller.detectedAgents(homeRoot: home.path))
-        #expect(detected.isSuperset(of: [.claudeCode, .codex, .cursor, .geminiCLI]))
+        #expect(detected.isSuperset(of: [.claudeCode, .codex, .cursor, .geminiCLI, .devin]))
+    }
+
+    @Test
+    func `detects devin by config dir`() throws {
+        let home = try makeFakeHome(detectedDirs: [".config/devin"])
+        defer { try? FileManager.default.removeItem(at: home) }
+        let detected = HookInstaller.detectedAgents(homeRoot: home.path)
+        #expect(detected.contains(.devin))
+        #expect(!detected.contains(.geminiCLI))
     }
 
     // MARK: - Install: Claude Code shape
@@ -1035,5 +1044,116 @@ struct HookInstallerTests {
         #expect(hooks["beforeSubmitPrompt"] != nil)
         #expect(hooks["stop"] != nil)
         #expect(installer.installState(for: .cursor) == .installed)
+    }
+
+    // MARK: - Devin (nested JSON shape, stdin session id)
+
+    /// Devin is turn-scoped like Claude Code and Codex: `UserPromptSubmit` → acquire, `Stop` →
+    /// release, plus a release-only `SessionEnd` for a session that ends without a `Stop`. The
+    /// session id comes from stdin only — Devin exposes no env var — so the commands carry no
+    /// `$…` positional.
+    @Test
+    func `install devin writes turn scoped hooks`() throws {
+        let home = try makeFakeHome(detectedDirs: [".config/devin"])
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let installer = HookInstaller(cliPath: "/usr/local/bin/adrafinil", homeRoot: home.path)
+        let result = try installer.install(for: .devin, dryRun: false)
+
+        #expect(result.summary.contains("UserPromptSubmit"))
+        #expect(result.summary.contains("Stop"))
+
+        let dict = try readJSON(home.path + "/.config/devin/config.json")
+        let hooks = try #require(dict["hooks"] as? [String: Any])
+
+        func command(under event: String) throws -> String {
+            let arr = try #require(hooks[event] as? [[String: Any]], "\(event) present")
+            let inner = try #require(arr.first?["hooks"] as? [[String: Any]])
+            return try #require(inner.first?["command"] as? String)
+        }
+
+        let acquire = try command(under: "UserPromptSubmit")
+        #expect(acquire.contains("acquire --tool devin"))
+        #expect(!acquire.contains("$"), "Devin exposes no session-id env var — the id is read from stdin")
+        let release = try command(under: "Stop")
+        #expect(release.contains("release --tool devin"))
+        #expect(!release.contains("$"))
+        let sessionEnd = try command(under: "SessionEnd")
+        #expect(sessionEnd.contains("release --tool devin"))
+        #expect(installer.installState(for: .devin) == .installed)
+    }
+
+    /// `~/.config/devin/config.json` holds Devin's own top-level keys (`agent`, `permissions`, …)
+    /// alongside `hooks` — install must add ours without touching them.
+    @Test
+    func `install devin preserves unrelated config keys`() throws {
+        let home = try makeFakeHome(detectedDirs: [".config/devin"])
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let path = home.path + "/.config/devin/config.json"
+        try writeJSON([
+            "agent": ["model": "default"],
+            "permissions": ["mode": "standard"],
+        ], to: path)
+
+        let installer = HookInstaller(cliPath: "/usr/local/bin/adrafinil", homeRoot: home.path)
+        _ = try installer.install(for: .devin, dryRun: false)
+
+        let dict = try readJSON(path)
+        #expect((dict["agent"] as? [String: Any])?["model"] as? String == "default")
+        #expect((dict["permissions"] as? [String: Any])?["mode"] as? String == "standard")
+        #expect(dict["hooks"] != nil)
+    }
+
+    /// Uninstall strips all three Adrafinil entries but leaves a user's own hook under the same
+    /// event untouched.
+    @Test
+    func `uninstall devin removes only adrafinil entries`() throws {
+        let home = try makeFakeHome(detectedDirs: [".config/devin"])
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let path = home.path + "/.config/devin/config.json"
+        try writeJSON([
+            "hooks": [
+                "Stop": [["hooks": [["type": "command", "command": "/usr/local/bin/user-stop"]]]],
+            ],
+        ], to: path)
+
+        let installer = HookInstaller(cliPath: "/usr/local/bin/adrafinil", homeRoot: home.path)
+        _ = try installer.install(for: .devin, dryRun: false)
+        try installer.uninstall(for: .devin)
+
+        let hooks = try #require(try readJSON(path)["hooks"] as? [String: Any])
+        #expect(hooks["UserPromptSubmit"] == nil, "our acquire is gone")
+        #expect(hooks["SessionEnd"] == nil, "our SessionEnd release is gone")
+        let stop = try #require(hooks["Stop"] as? [[String: Any]])
+        let stopCmds = stop.compactMap { ($0["hooks"] as? [[String: Any]])?.first?["command"] as? String }
+        #expect(stopCmds == ["/usr/local/bin/user-stop"], "user's own Stop hook preserved, ours removed")
+        #expect(installer.installState(for: .devin) == .notInstalled)
+    }
+
+    /// An install missing the `SessionEnd` release (e.g. a partial write) must read as
+    /// `.modifiedExternally` so the UI nudges a reinstall — not `.notInstalled`, which would hide
+    /// the live entries.
+    @Test
+    func `devin install missing SessionEnd release reads as modified`() throws {
+        let home = try makeFakeHome(detectedDirs: [".config/devin"])
+        defer { try? FileManager.default.removeItem(at: home) }
+        let path = home.path + "/.config/devin/config.json"
+
+        try writeJSON([
+            "hooks": [
+                "UserPromptSubmit": [["hooks": [["type": "command", "command": "/usr/local/bin/adrafinil acquire --tool devin", "_adrafinil": true]]]],
+                "Stop": [["hooks": [["type": "command", "command": "/usr/local/bin/adrafinil release --tool devin", "_adrafinil": true]]]],
+            ],
+        ], to: path)
+
+        let installer = HookInstaller(cliPath: "/usr/local/bin/adrafinil", homeRoot: home.path)
+        #expect(installer.installState(for: .devin) == .modifiedExternally)
+
+        _ = try installer.install(for: .devin, dryRun: false)
+        #expect(installer.installState(for: .devin) == .installed)
+        let hooks = try #require(try readJSON(path)["hooks"] as? [String: Any])
+        #expect(hooks["SessionEnd"] != nil)
     }
 }

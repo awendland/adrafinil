@@ -792,21 +792,32 @@ final class Daemon {
         let watchedPids = Set(snapshot.map(\.pid))
         sniffSuppressedPids = sniffSuppressedPids.filter { kill($0, 0) == 0 || errno == EPERM }
 
+        // Name/path match only — gateway agents (argv-matched) are deliberately not sniff-acquired.
+        var agents: [pid_t: (name: String, kind: AgentKind)] = [:]
         for proc in ProcessResolver.runningProcesses() {
-            guard !watchedPids.contains(proc.pid), !sniffSuppressedPids.contains(proc.pid) else { continue }
-            // Name/path match only — gateway agents (argv-matched) are deliberately not sniff-acquired.
             guard let kind = AgentKind.forRunningProcess(name: proc.name, path: proc.path),
                   !kind.isGatewayScoped else { continue }
-
+            agents[proc.pid] = (proc.name, kind)
+        }
+        // A same-kind ancestor/descendant pair (e.g. Devin's `devin` wrapper and its `devin acp`
+        // child) is one session — acquire only for the uncovered representative.
+        let selected = SniffCandidates.select(
+            agents: agents.mapValues(\.kind),
+            watched: watchedPids,
+            suppressed: sniffSuppressedPids,
+            parentOf: { ProcessResolver.parentPID(of: $0) },
+        )
+        for pid in selected {
+            guard let proc = agents[pid] else { continue }
             let assertion = Assertion(
-                key: "\(CLIRequestValidator.sniffedKeyPrefix)\(kind.rawValue):\(proc.pid)",
-                tool: kind.rawValue,
+                key: "\(CLIRequestValidator.sniffedKeyPrefix)\(proc.kind.rawValue):\(pid)",
+                tool: proc.kind.rawValue,
                 reason: "auto (process sniffing)",
-                pid: proc.pid,
+                pid: pid,
                 processName: proc.name,
                 origin: .sniffed,
             )
-            log.info("Auto-acquiring for sniffed agent \(kind.rawValue) (pid \(proc.pid))")
+            log.info("Auto-acquiring for sniffed agent \(proc.kind.rawValue) (pid \(pid))")
             await handleAcquire(assertion)
         }
     }

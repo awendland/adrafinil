@@ -3,9 +3,9 @@ import Testing
 @testable import AdrafinilShared
 
 /// Covers the agent-facing MCP server registration (`adrafinil mcp`) — the upsert/remove/state
-/// machinery, driven through the `HookInstaller` MCP API. Claude Code is the only device-verified
-/// MCP agent (Cursor/Gemini are gated off until verified). MCP registration is gated on
-/// `mcpShape != nil`, not `isDetected`, so a bare temp home suffices.
+/// machinery, driven through the `HookInstaller` MCP API. Claude Code and Devin are the
+/// device-verified MCP agents (Cursor/Gemini are gated off until verified). MCP registration is
+/// gated on `mcpShape != nil`, not `isDetected`, so a bare temp home suffices.
 @Suite("MCP server registration")
 struct MCPServerShapeTests {
     private func makeHome() throws -> URL {
@@ -34,9 +34,11 @@ struct MCPServerShapeTests {
         let home = try makeHome()
         defer { try? FileManager.default.removeItem(at: home) }
         let inst = installer(home)
-        // Only Claude Code's MCP format is device-verified, so it's the only agent that advertises
-        // MCP support. Cursor and Gemini are believed-correct but gated off until verified.
+        // Only Claude Code's and Devin's MCP formats are device-verified, so they're the only
+        // agents that advertise MCP support. Cursor and Gemini are believed-correct but gated off
+        // until verified.
         #expect(inst.supportsMCP(for: .claudeCode))
+        #expect(inst.supportsMCP(for: .devin))
         for agent in [AgentKind.codex, .cursor, .geminiCLI, .aider, .cline, .hermes, .openCode, .pi] {
             #expect(!inst.supportsMCP(for: agent), "\(agent.rawValue) should be gated until device-verified")
         }
@@ -66,6 +68,23 @@ struct MCPServerShapeTests {
         #expect(entry["command"] as? String == "/usr/local/bin/adrafinil")
         let args = try #require(entry["args"] as? [String])
         #expect(args == ["mcp", "--tool", "claude-code"])
+    }
+
+    /// Devin's MCP servers live in `~/.config/devin/mcp_config.json` under `mcpServers` — verified
+    /// against Devin CLI 3000.11.3, which loads it and lists the adrafinil tools.
+    @Test
+    func `install registers devin stdio server`() throws {
+        let home = try makeHome()
+        defer { try? FileManager.default.removeItem(at: home) }
+        _ = try installer(home).installMCP(for: .devin)
+
+        let dict = try readJSON(home.path + "/.config/devin/mcp_config.json")
+        let servers = try #require(dict["mcpServers"] as? [String: Any])
+        let entry = try #require(servers["adrafinil"] as? [String: Any])
+        #expect(entry["type"] as? String == "stdio")
+        #expect(entry["command"] as? String == "/usr/local/bin/adrafinil")
+        let args = try #require(entry["args"] as? [String])
+        #expect(args == ["mcp", "--tool", "devin"])
     }
 
     @Test

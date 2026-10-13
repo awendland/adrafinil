@@ -6,6 +6,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
     case codex
     case cursor
     case geminiCLI = "gemini-cli"
+    case devin
     case aider
     case hermes
     case openCode = "opencode"
@@ -18,6 +19,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
         case .codex: "Codex"
         case .cursor: "Cursor"
         case .geminiCLI: "Gemini CLI"
+        case .devin: "Devin"
         case .aider: "Aider"
         case .hermes: "Hermes"
         case .openCode: "OpenCode"
@@ -39,6 +41,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
         case .codex: ["codex", "codex-aarch64-apple-darwin", "codex-x86_64-apple-darwin"]
         case .cursor: ["cursor", "Cursor"]
         case .geminiCLI: ["gemini"]
+        case .devin: ["devin"]
         case .aider: ["aider"]
         case .hermes: ["hermes"]
         // npm's `opencode-ai` package maps its bin entry to `bin/opencode.exe` (yes, on macOS), and
@@ -166,7 +169,7 @@ public enum AgentKind: String, Codable, CaseIterable, Sendable {
     /// Integration tier: 1 = full hooks, 2 = partial/wrapper/plugin needed.
     public var tier: Int {
         switch self {
-        case .claudeCode, .codex, .cursor, .geminiCLI: 1
+        case .claudeCode, .codex, .cursor, .geminiCLI, .devin: 1
         case .aider, .hermes, .openCode, .cline, .pi: 2
         }
     }
