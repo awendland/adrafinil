@@ -31,7 +31,7 @@ public enum SniffCandidates {
         agents.keys
             .filter { pid in
                 guard !watched.contains(pid), !suppressed.contains(pid) else { return false }
-                return !isCovered(pid, by: agents, watched: watched, parentOf: parentOf)
+                return !isCovered(pid, by: agents, watched: watched, suppressed: suppressed, parentOf: parentOf)
             }
             .sorted()
     }
@@ -39,15 +39,18 @@ public enum SniffCandidates {
     /// Whether another same-kind process already stands in for `pid`: a strict ancestor in
     /// `agents` of the same kind (the outermost process represents the pair), or a watched
     /// same-kind descendant (a hook-held `devin acp` child already covers its `devin` wrapper).
+    /// A suppressed ancestor stands in for nothing: it will never be held again, so a descendant
+    /// it covered would go unheld for the rest of the ancestor's life.
     private static func isCovered(
         _ pid: pid_t,
         by agents: [pid_t: AgentKind],
         watched: Set<pid_t>,
+        suppressed: Set<pid_t>,
         parentOf: (pid_t) -> pid_t,
     ) -> Bool {
         guard let kind = agents[pid] else { return false }
         let ancestors = strictAncestors(of: pid, via: parentOf)
-        if ancestors.contains(where: { agents[$0] == kind }) { return true }
+        if ancestors.contains(where: { agents[$0] == kind && !suppressed.contains($0) }) { return true }
         return watched.contains { w in
             agents[w] == kind && strictAncestors(of: w, via: parentOf).contains(pid)
         }

@@ -98,6 +98,19 @@ struct SniffCandidatesTests {
     }
 
     @Test
+    func `a suppressed ancestor does not cover its same-kind descendant`() {
+        // An outer claude (10) idled once and was suppressed; a nested `claude -p` (11) it
+        // launched in the background is still a live agent and needs its own hold.
+        let selected = SniffCandidates.select(
+            agents: [10: .claudeCode, 11: .claudeCode],
+            watched: [],
+            suppressed: [10],
+            parentOf: parentOf([11: 10]),
+        )
+        #expect(selected == [11])
+    }
+
+    @Test
     func `parent walk terminates on a cycle`() {
         // A corrupt/racy ppid map (10 → 11 → 10) must not loop forever. In the degenerate case
         // each sees the other as an ancestor, so both are dropped — better one too few holds
