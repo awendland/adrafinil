@@ -126,9 +126,11 @@ prompt, where holding would re-introduce the whole-session hold this integration
 issue #2; Cursor `beforeSubmitPrompt`/`stop`, issue #15; Devin `UserPromptSubmit`/`Stop` plus a
 release-only `SessionEnd` for a session that ends without a `Stop`, verified against Devin CLI
 3000.11.3 — like Claude Code, an interrupted Devin turn fires no `Stop` (verified), so the CPU-idle
-sweep releases it; the same wiring is expected but unverified to cover Devin Desktop's
-"Devin Local" agent, which per Devin's docs runs the same `devin acp` harness and reads the same
-user config). Cursor's acquire additionally carries a
+sweep releases it; the same wiring covers Devin Desktop's "Devin Local" agent too — its bundled
+`devin acp` reads the same user config, and since one long-lived `devin acp` serves every chat,
+turn holds attach to that shared process: `Stop` releases them, and a chat-UI cancel (which fires
+no `Stop`) is caught by the CPU-idle sweep once the process idles between turns; verified on
+Desktop 3.10.48, so unlike Cursor no TTL is needed). Cursor's acquire additionally carries a
 `--ttl`: its holds attach to the single long-lived Cursor app process, which neither the process-exit
 watcher nor the CPU-idle sweep can catch (the app's own UI keeps the tree busy), so the TTL —
 refreshed each prompt — is the stale-hold backstop. Gemini's per-turn event names aren't

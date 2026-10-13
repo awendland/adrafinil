@@ -54,16 +54,6 @@ struct HookInstallerTests {
         #expect(detected.contains(.devin))
     }
 
-    @Test
-    func `devin is not detected without its config dir`() throws {
-        let home = try makeFakeHome()
-        defer { try? FileManager.default.removeItem(at: home) }
-
-        let detected = HookInstaller.detectedAgents(homeRoot: home.path)
-
-        #expect(!detected.contains(.devin))
-    }
-
     // MARK: - Install: Claude Code shape
 
     @Test

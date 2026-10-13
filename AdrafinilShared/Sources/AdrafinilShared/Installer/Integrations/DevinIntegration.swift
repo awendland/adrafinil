@@ -17,9 +17,14 @@ import Foundation
 /// There is no session-id env var to expand — every hook payload carries `session_id` on stdin, so
 /// the commands pass no positional and the CLI sources the id there.
 ///
-/// The same wiring is expected to cover Devin Desktop's "Devin Local" agent too — per Devin's
-/// docs it runs the same `devin acp` harness and reads the same user-level
-/// `~/.config/devin/config.json` — but that is not yet verified on a Desktop install.
+/// Devin Desktop's "Devin Local" agent runs a bundled `devin acp` (inside `Devin.app`, started by
+/// `Devin Helper (Plugin)`) that reads the same user-level `~/.config/devin/config.json`, so this
+/// one integration covers it too — verified on Desktop 3.10.48. A single long-lived `devin acp`
+/// serves every chat, so a turn's hold attaches to that shared process: `Stop` releases it when
+/// the reply lands, and a turn cancelled from the chat UI fires no `Stop` — the CPU-idle sweep
+/// releases the hold once the shared process idles between turns (verified). Unlike Cursor no TTL
+/// is needed. Detection also checks `/Applications/Devin.app` so a Desktop-only user with no
+/// `~/.config/devin` yet is still found (install creates the directory).
 ///
 /// No TTL: the owning `devin` process is resolvable by the parent-walk (a hook's process tree is
 /// `/bin/sh` → `devin` → …, basename `devin`), so the daemon's process-exit watcher covers a
@@ -34,7 +39,8 @@ struct DevinIntegration: AgentIntegration {
     let agent = AgentKind.devin
 
     func isDetected(_ ctx: HookContext) -> Bool {
-        FileManager.default.fileExists(atPath: "\(ctx.homeRoot)/.config/devin")
+        FileManager.default.fileExists(atPath: "\(ctx.homeRoot)/.config/devin") ||
+            FileManager.default.fileExists(atPath: "/Applications/Devin.app")
     }
     func primaryConfigPath(_ ctx: HookContext) -> String {
         "\(ctx.homeRoot)/.config/devin/config.json"
