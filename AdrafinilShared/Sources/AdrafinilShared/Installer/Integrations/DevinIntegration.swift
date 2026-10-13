@@ -23,9 +23,9 @@ import Foundation
 ///
 /// No TTL: the owning `devin` process is resolvable by the parent-walk (a hook's process tree is
 /// `/bin/sh` → `devin` → …, basename `devin`), so the daemon's process-exit watcher covers a
-/// terminal closed mid-turn. Whether Devin fires `Stop` on an Esc-interrupt/cancel is unverified;
-/// if it doesn't, the CPU-idle sweep is the backstop. No background-shell hook either — Devin's
-/// exec exposes no clean `run_in_background` signal.
+/// terminal closed mid-turn. Like Claude Code, Devin fires no `Stop` when a turn is interrupted
+/// (double-Esc in the TUI; verified on 3000.11.3), so the CPU-idle sweep releases that hold. No
+/// background-shell hook either — Devin's exec exposes no clean `run_in_background` signal.
 ///
 /// **MCP.** Devin imports Claude Code's MCP servers (`~/.claude.json`) by default, so registering
 /// Devin's own `adrafinil` server in `~/.config/devin/mcp_config.json` overrides the imported one

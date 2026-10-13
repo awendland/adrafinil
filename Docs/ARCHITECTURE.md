@@ -125,8 +125,8 @@ prompt, where holding would re-introduce the whole-session hold this integration
 **Codex, Cursor, and Devin are turn-scoped too** (verified events: Codex `UserPromptSubmit`/`Stop`,
 issue #2; Cursor `beforeSubmitPrompt`/`stop`, issue #15; Devin `UserPromptSubmit`/`Stop` plus a
 release-only `SessionEnd` for a session that ends without a `Stop`, verified against Devin CLI
-3000.11.3 — whether Devin fires `Stop` on an Esc-interrupt/cancel is unverified, so the CPU-idle
-sweep is the backstop; the same wiring is expected but unverified to cover Devin Desktop's
+3000.11.3 — like Claude Code, an interrupted Devin turn fires no `Stop` (verified), so the CPU-idle
+sweep releases it; the same wiring is expected but unverified to cover Devin Desktop's
 "Devin Local" agent, which per Devin's docs runs the same `devin acp` harness and reads the same
 user config). Cursor's acquire additionally carries a
 `--ttl`: its holds attach to the single long-lived Cursor app process, which neither the process-exit
