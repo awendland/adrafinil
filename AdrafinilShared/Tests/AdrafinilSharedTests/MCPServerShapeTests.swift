@@ -81,10 +81,11 @@ struct MCPServerShapeTests {
         let dict = try readJSON(home.path + "/.config/devin/mcp_config.json")
         let servers = try #require(dict["mcpServers"] as? [String: Any])
         let entry = try #require(servers["adrafinil"] as? [String: Any])
-        #expect(entry["type"] as? String == "stdio")
-        #expect(entry["command"] as? String == "/usr/local/bin/adrafinil")
-        let args = try #require(entry["args"] as? [String])
-        #expect(args == ["mcp", "--tool", "devin"])
+        #expect(NSDictionary(dictionary: entry).isEqual(to: [
+            "type": "stdio",
+            "command": "/usr/local/bin/adrafinil",
+            "args": ["mcp", "--tool", "devin"],
+        ]))
     }
 
     @Test

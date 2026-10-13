@@ -129,9 +129,15 @@ struct AgentKindTests {
     /// Homebrew's `devin-cli` cask symlinks `devin` → `/opt/homebrew/Caskroom/devin-cli/<ver>/bin/devin`,
     /// whose basename is still `devin` — so both the owning-PID walk and the sniff sweep resolve it.
     @Test
-    func `for running process matches devin`() {
+    func `homebrew devin binary resolves to devin`() {
         let path = "/opt/homebrew/Caskroom/devin-cli/3000.11.3/bin/devin"
         #expect(AgentKind.forRunningProcess(name: "devin", path: path) == .devin)
+    }
+
+    /// The owning-PID walk uses the same name set: the cask's `devin` basename must satisfy it too.
+    @Test
+    func `homebrew devin path is recognized by the owning-agent walk`() {
+        let path = "/opt/homebrew/Caskroom/devin-cli/3000.11.3/bin/devin"
         #expect(ProcessResolver.pathMatchesAgent(path, names: AgentKind.allBinaryNames))
     }
 

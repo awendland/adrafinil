@@ -74,14 +74,27 @@ struct SniffCandidatesTests {
     }
 
     @Test
-    func `watched and suppressed pids are excluded`() {
+    func `a watched pid is not sniffed`() {
+        // An existing hold already watches this pid — sniffing it again would double-acquire.
         let selected = SniffCandidates.select(
-            agents: [10: .devin, 20: .codex, 30: .cursor],
-            watched: [20],
-            suppressed: [30],
-            parentOf: parentOf([10: 2, 20: 3, 30: 4]),
+            agents: [10: .devin, 20: .codex],
+            watched: [10],
+            suppressed: [],
+            parentOf: parentOf([10: 2, 20: 3]),
         )
-        #expect(selected == [10])
+        #expect(selected == [20])
+    }
+
+    @Test
+    func `a suppressed pid is not sniffed`() {
+        // The daemon already released a sniffed hold on this pid once — don't re-acquire it.
+        let selected = SniffCandidates.select(
+            agents: [10: .devin, 20: .codex],
+            watched: [],
+            suppressed: [10],
+            parentOf: parentOf([10: 2, 20: 3]),
+        )
+        #expect(selected == [20])
     }
 
     @Test
