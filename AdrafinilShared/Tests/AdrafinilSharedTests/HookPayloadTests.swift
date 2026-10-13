@@ -50,6 +50,19 @@ struct HookPayloadTests {
         #expect(HookPayload.agentID(in: data(#"{"session_id":"only-session"}"#)) == nil)
     }
 
+    // MARK: - Devin payloads
+
+    /// Payloads captured verbatim from Devin CLI 3000.11.3 — every hook event carries `session_id`
+    /// on stdin, which is what the integration sources the hold key from.
+    @Test(arguments: [
+        #"{"hook_event_name":"UserPromptSubmit","prompt":"Reply with just the word hi.","session_id":"respected-class","prompt_id":"58374864-bb34-4f09-97f2-19407d7becac"}"#,
+        #"{"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"hi","session_id":"respected-class","prompt_id":"58374864-bb34-4f09-97f2-19407d7becac"}"#,
+        #"{"hook_event_name":"SessionEnd","reason":"other","session_id":"respected-class","prompt_id":"58374864-bb34-4f09-97f2-19407d7becac"}"#,
+    ])
+    func `devin hook payloads yield their session id`(payload: String) {
+        #expect(HookPayload.sessionID(in: data(payload)) == "respected-class")
+    }
+
     // MARK: - Empty / malformed
 
     @Test

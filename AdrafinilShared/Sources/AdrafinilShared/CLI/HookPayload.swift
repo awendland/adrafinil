@@ -2,8 +2,8 @@ import Foundation
 
 /// Pure extraction of the identity fields Adrafinil keys holds on out of a hook's stdin JSON payload.
 ///
-/// Every Claude-Code-style hook system (Claude Code, Codex, Gemini CLI, Cursor) invokes the hook
-/// command with a JSON object on stdin. Two fields matter to us:
+/// Every Claude-Code-style hook system (Claude Code, Codex, Gemini CLI, Cursor, Devin) invokes the
+/// hook command with a JSON object on stdin. Two fields matter to us:
 ///
 ///   - `session_id` — the parent session/turn id, present on every hook. `UserPromptSubmit`/`Stop`
 ///     key their per-turn hold on it.

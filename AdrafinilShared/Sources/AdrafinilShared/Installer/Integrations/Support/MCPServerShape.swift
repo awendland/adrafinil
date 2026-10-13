@@ -5,8 +5,8 @@ import Foundation
 /// can hold sleep on its own.
 ///
 /// Parallels the hook shapes but is simpler: an MCP server is a single *named* entry under a
-/// container object (`mcpServers` for Claude Code / Cursor / Gemini CLI), so the server name is its
-/// own idempotency handle — no `_adrafinil` tag is needed. Install upserts our entry, uninstall
+/// container object (`mcpServers` for Claude Code / Cursor / Gemini CLI / Devin), so the server name
+/// is its own idempotency handle — no `_adrafinil` tag is needed. Install upserts our entry, uninstall
 /// removes just that key, and the user's other servers are always preserved.
 ///
 /// ```json
