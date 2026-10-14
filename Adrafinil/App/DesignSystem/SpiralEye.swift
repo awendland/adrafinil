@@ -167,7 +167,7 @@ nonisolated enum SpiralEyeGeometry {
         let a = pose.rOut / exp(b * th1)
         let th0 = th1 - pose.span
 
-        /// Almond ring profile: flatten y near the horizontal extremes → pointed canthi.
+        // Almond ring profile: flatten y near the horizontal extremes → pointed canthi.
         func almondY(_ t: Double) -> Double {
             let s = sin(t)
             return (s < 0 ? -1 : 1) * pow(abs(s), 1 + pose.almond)
