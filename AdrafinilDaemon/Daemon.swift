@@ -428,13 +428,13 @@ final class Daemon {
 
     /// Plays the pre-sleep cue for the release that just emptied the registry (issue #8): the
     /// audible "your Mac is going back to sleep" for a user who closed the lid and walked away.
-    /// `SleepCueDecider` gates it — silent when the lid is open (the user can see the state),
-    /// when the feature is off, or when this cause's sound is "off". A user's own release
+    /// `SleepCueDecider` gates it — silent when the lid is open or an external display is
+    /// connected (the user can see the state, and the Mac stays awake), when the feature is off, or when this cause's sound is "off". A user's own release
     /// against a closed lid (a force release over SSH) gets its confirmation cue.
     private func playSleepCueIfNeeded() async {
         let decision = SleepCueDecider().onSleepResuming(
             cause: lastReleaseCause,
-            lidClosed: lidMonitor.isLidClosed,
+            onlyDisplayIsClosedBuiltIn: DisplayHold.onlyDisplayIsClosedBuiltIn(lidClosed: lidMonitor.isLidClosed),
             settings: settings,
         )
         guard let soundName = decision.soundName else { return }

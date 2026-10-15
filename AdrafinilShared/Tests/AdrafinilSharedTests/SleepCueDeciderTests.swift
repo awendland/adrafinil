@@ -24,18 +24,20 @@ struct SleepCueDeciderTests {
 
     // MARK: - Gating
 
+    /// Covers both a lid that's open and a closed lid driving an external display: the user is
+    /// at the desk and the Mac isn't going back to sleep, so there's nothing to announce.
     @Test
-    func `lid open is silent for every cause`() {
+    func `lid open or external display is silent for every cause`() {
         for cause in [ReleaseCause.workComplete, .holdExpired, .safetyCutout, .userAction] {
-            let d = decider.onSleepResuming(cause: cause, lidClosed: false, settings: settings())
-            #expect(d == .silent, "cause \(cause) should be silent with the lid open")
+            let d = decider.onSleepResuming(cause: cause, onlyDisplayIsClosedBuiltIn: false, settings: settings())
+            #expect(d == .silent, "cause \(cause) should be silent unless in clamshell sleep")
         }
     }
 
     @Test
     func `master toggle off is silent for every cause`() {
         for cause in [ReleaseCause.workComplete, .holdExpired, .safetyCutout, .userAction] {
-            let d = decider.onSleepResuming(cause: cause, lidClosed: true, settings: settings(enabled: false))
+            let d = decider.onSleepResuming(cause: cause, onlyDisplayIsClosedBuiltIn: true, settings: settings(enabled: false))
             #expect(d == .silent, "cause \(cause) should be silent when disabled")
         }
     }
@@ -44,7 +46,7 @@ struct SleepCueDeciderTests {
     /// confirmation cue. At-the-machine releases are covered by the lid-open gate above.
     @Test
     func `user action with lid closed gets its confirmation cue`() {
-        let d = decider.onSleepResuming(cause: .userAction, lidClosed: true, settings: settings())
+        let d = decider.onSleepResuming(cause: .userAction, onlyDisplayIsClosedBuiltIn: true, settings: settings())
         #expect(d == SleepCueDecider.Decision(soundName: "default", cue: .sleepUserAction))
     }
 
@@ -54,19 +56,19 @@ struct SleepCueDeciderTests {
     func `each cause resolves its own synthesized cue by default`() {
         let s = settings()
         #expect(
-            decider.onSleepResuming(cause: .workComplete, lidClosed: true, settings: s)
+            decider.onSleepResuming(cause: .workComplete, onlyDisplayIsClosedBuiltIn: true, settings: s)
                 == SleepCueDecider.Decision(soundName: "default", cue: .sleepWorkComplete),
         )
         #expect(
-            decider.onSleepResuming(cause: .holdExpired, lidClosed: true, settings: s)
+            decider.onSleepResuming(cause: .holdExpired, onlyDisplayIsClosedBuiltIn: true, settings: s)
                 == SleepCueDecider.Decision(soundName: "default", cue: .sleepHoldExpired),
         )
         #expect(
-            decider.onSleepResuming(cause: .safetyCutout, lidClosed: true, settings: s)
+            decider.onSleepResuming(cause: .safetyCutout, onlyDisplayIsClosedBuiltIn: true, settings: s)
                 == SleepCueDecider.Decision(soundName: "default", cue: .sleepSafetyCutout),
         )
         #expect(
-            decider.onSleepResuming(cause: .userAction, lidClosed: true, settings: s)
+            decider.onSleepResuming(cause: .userAction, onlyDisplayIsClosedBuiltIn: true, settings: s)
                 == SleepCueDecider.Decision(soundName: "default", cue: .sleepUserAction),
         )
     }
@@ -74,9 +76,9 @@ struct SleepCueDeciderTests {
     @Test
     func `per-cause off silences only that cause`() {
         let s = settings(workComplete: "off")
-        #expect(decider.onSleepResuming(cause: .workComplete, lidClosed: true, settings: s) == .silent)
+        #expect(decider.onSleepResuming(cause: .workComplete, onlyDisplayIsClosedBuiltIn: true, settings: s) == .silent)
         #expect(
-            decider.onSleepResuming(cause: .holdExpired, lidClosed: true, settings: s)
+            decider.onSleepResuming(cause: .holdExpired, onlyDisplayIsClosedBuiltIn: true, settings: s)
                 == SleepCueDecider.Decision(soundName: "default", cue: .sleepHoldExpired),
         )
     }
@@ -85,7 +87,7 @@ struct SleepCueDeciderTests {
     @Test
     func `system sound passes through without a synth cue`() {
         let s = settings(safetyCutout: "Submarine")
-        let d = decider.onSleepResuming(cause: .safetyCutout, lidClosed: true, settings: s)
+        let d = decider.onSleepResuming(cause: .safetyCutout, onlyDisplayIsClosedBuiltIn: true, settings: s)
         #expect(d == SleepCueDecider.Decision(soundName: "Submarine", cue: nil))
     }
 

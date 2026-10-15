@@ -11,8 +11,9 @@ public enum ReleaseCause: String, Sendable, Equatable {
     case holdExpired
     /// A thermal or low-battery cutout stopped the work mid-task to protect the machine.
     case safetyCutout
-    /// The user did it themselves (force release, pause, quit). With the lid closed — the only
-    /// state where any cue plays — that means a *remote* release, typically over SSH.
+    /// The user did it themselves (force release, pause, quit). With the lid closed and no
+    /// external display — the only state where any cue plays — that means a *remote* release,
+    /// typically over SSH.
     case userAction
 
     /// Collapses an idle-sweep batch to a single cause. An agent finishing (CPU-idle or its
@@ -30,10 +31,12 @@ public enum ReleaseCause: String, Sendable, Equatable {
 /// Pure and side-effect-free, mirroring `LidActionDecider`, so the gating is exhaustively
 /// unit-testable. The gates:
 ///
-/// - **Lid open → silent.** The user is present and can see the menu-bar state; the cue exists
-///   for the closed-lid, user-away case (issue #8). This gate also keeps `userAction` sensible:
-///   a force release clicked at the machine is silent, while one issued remotely (SSH against a
-///   closed lid) gets its confirmation cue.
+/// - **Lid open, or closed but driving an external display → silent.** The user is present and
+///   can see the menu-bar state, and a closed lid with an external display is a desk setup that
+///   doesn't go back to sleep. The cue exists for the clamshell-sleep, user-away case (issue #8):
+///   lid closed with no other display, the same gate as `CutoutSleepDecider`. This gate also keeps
+///   `userAction` sensible: a force release clicked at the machine is silent, while one issued
+///   remotely (SSH against a closed lid) gets its confirmation cue.
 /// - **Master toggle off → silent.**
 /// - Otherwise the cause's configured sound plays: `"default"` is the synthesized cue for that
 ///   cause, `"off"` silences just that cause, anything else names a macOS system sound.
@@ -56,10 +59,10 @@ public struct SleepCueDecider {
 
     public func onSleepResuming(
         cause: ReleaseCause,
-        lidClosed: Bool,
+        onlyDisplayIsClosedBuiltIn: Bool,
         settings: AdrafinilSettings,
     ) -> Decision {
-        guard lidClosed, settings.sleepSoundEnabled else { return .silent }
+        guard onlyDisplayIsClosedBuiltIn, settings.sleepSoundEnabled else { return .silent }
         let soundName: String
         let cue: ChimeSynth.Cue
         switch cause {

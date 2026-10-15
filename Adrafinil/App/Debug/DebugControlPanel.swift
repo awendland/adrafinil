@@ -189,13 +189,13 @@
         }
 
         /// Auditions a cause through the real `SleepCueDecider` against the on-disk settings,
-        /// as if the lid were closed — so a per-cause "Off" or a disabled master toggle is
+        /// as if the lid were closed with no external display — so a per-cause "Off" or a disabled master toggle is
         /// audible (as silence) here too, exactly like on the daemon.
         private func sleepCueButton(_ title: String, cause: ReleaseCause) -> some View {
             Button {
                 let settings = AdrafinilSettings.load()
                 let decision = SleepCueDecider().onSleepResuming(
-                    cause: cause, lidClosed: true, settings: settings,
+                    cause: cause, onlyDisplayIsClosedBuiltIn: true, settings: settings,
                 )
                 guard let soundName = decision.soundName else { return }
                 ChimePreviewPlayer.shared.preview(
